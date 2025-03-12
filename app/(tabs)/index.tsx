@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { RotateCcw, Check } from 'lucide-react-native';
+import { RotateCcw, Pencil } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
-import DifficultySelector from '@/components/DifficultySelector';
+import * as Haptics from 'expo-haptics';
+import { useSettings } from '@/contexts/SettingsContext';
+import GameStartScreen from '@/components/GameStartScreen';
 import {
   type Board,
   type Difficulty,
@@ -12,6 +14,9 @@ import {
   checkMove,
   checkWin,
 } from '@/utils/sudoku';
+
+// Type for cell notes
+type CellNotes = Record<string, Set<number>>;
 
 export default function GameScreen() {
   const [board, setBoard] = useState<Board>([]);
@@ -21,7 +26,16 @@ export default function GameScreen() {
   const [timer, setTimer] = useState(0);
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [mistakes, setMistakes] = useState<Set<string>>(new Set());
+  const [errorCount, setErrorCount] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [numberCounts, setNumberCounts] = useState<Record<number, number>>({});
+  // Add notes state
+  const [notes, setNotes] = useState<CellNotes>({});
+  const [isNoteMode, setIsNoteMode] = useState(false);
+
+  // Use the settings context to get the current settings
+  const { highlightMatchingNumbers, showMistakes, autoCheck, hapticFeedback, notesEnabled } = useSettings();
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -37,21 +51,25 @@ export default function GameScreen() {
     setSelectedCell(null);
     setTimer(0);
     setMistakes(new Set());
+    setErrorCount(0);
     setIsComplete(false);
+    setDifficulty(diff);
+    setGameStarted(true);
+    setNotes({});  // Clear notes when starting a new game
+    setIsNoteMode(false); // Reset to regular mode
   }, []);
 
-  useEffect(() => {
-    if (!fontsLoaded) return;
-    startNewGame(difficulty);
-  }, [fontsLoaded, difficulty, startNewGame]);
+  const handleGameStart = (diff: Difficulty) => {
+    startNewGame(diff);
+  };
 
   useEffect(() => {
-    if (!fontsLoaded || isComplete) return;
+    if (!fontsLoaded || !gameStarted || isComplete) return;
     const interval = setInterval(() => {
       setTimer(t => t + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [fontsLoaded, isComplete]);
+  }, [fontsLoaded, gameStarted, isComplete]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -60,13 +78,58 @@ export default function GameScreen() {
   };
 
   const handleCellPress = (row: number, col: number) => {
-    if (initialBoard[row][col] !== null) return;
+    // Allow selection of any cell, including prefilled ones
     setSelectedCell([row, col]);
+  };
+
+  // Count the occurrences of each number in the board
+  useEffect(() => {
+    if (!board.length) return;
+    
+    const counts: Record<number, number> = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0};
+    
+    // Count filled numbers in the board
+    board.forEach(row => {
+      row.forEach(cell => {
+        if (cell !== null) {
+          counts[cell] += 1;
+        }
+      });
+    });
+    
+    setNumberCounts(counts);
+  }, [board]);
+
+  // Toggle note mode
+  const toggleNoteMode = () => {
+    if (hapticFeedback && Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setIsNoteMode(prev => !prev);
+  };
+
+  // Get the cell key string
+  const cellKey = (row: number, col: number) => `${row},${col}`;
+  
+  // Get notes for a specific cell
+  const getCellNotes = (row: number, col: number): Set<number> => {
+    const key = cellKey(row, col);
+    return notes[key] || new Set();
   };
 
   const handleNumberPress = (number: number) => {
     if (!selectedCell) return;
     const [row, col] = selectedCell;
+    
+    // Don't allow changes to prefilled cells
+    if (initialBoard[row][col] !== null) return;
+    
+    // Trigger haptic feedback if enabled
+    if (hapticFeedback && Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    const key = cellKey(row, col);
     
     // Handle eraser (0)
     if (number === 0) {
@@ -74,47 +137,115 @@ export default function GameScreen() {
       newBoard[row][col] = null;
       setBoard(newBoard);
       const newMistakes = new Set(mistakes);
-      newMistakes.delete(`${row},${col}`);
+      newMistakes.delete(key);
       setMistakes(newMistakes);
+      
+      // Also clear notes for this cell
+      const newNotes = { ...notes };
+      delete newNotes[key];
+      setNotes(newNotes);
       return;
     }
 
+    if (isNoteMode && notesEnabled) {
+      // Handle note mode - toggle the note for this number
+      const cellNotes = new Set(notes[key] || []);
+      
+      if (cellNotes.has(number)) {
+        cellNotes.delete(number);
+      } else {
+        cellNotes.add(number);
+      }
+      
+      const newNotes = { ...notes };
+      if (cellNotes.size === 0) {
+        delete newNotes[key];
+      } else {
+        newNotes[key] = cellNotes;
+      }
+      setNotes(newNotes);
+      return;
+    }
+
+    // Regular mode - set the number in the cell and clear any notes
     const newBoard = board.map(r => [...r]);
     newBoard[row][col] = number;
     setBoard(newBoard);
+    
+    // Clear notes for this cell when a number is placed
+    const newNotes = { ...notes };
+    delete newNotes[key];
+    setNotes(newNotes);
 
     // Check if the move is correct
     const isCorrect = checkMove(newBoard, solution, [row, col], number);
     const newMistakes = new Set(mistakes);
     if (!isCorrect) {
-      newMistakes.add(`${row},${col}`);
+      newMistakes.add(key);
+      setErrorCount(prev => prev + 1);
     } else {
-      newMistakes.delete(`${row},${col}`);
+      newMistakes.delete(key);
     }
     setMistakes(newMistakes);
 
     // Check if the puzzle is complete
     if (checkWin(newBoard, solution)) {
       setIsComplete(true);
+      if (hapticFeedback && Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     }
   };
 
   const handleRestart = () => {
-    setBoard(initialBoard.map(row => [...row]));
-    setSelectedCell(null);
-    setMistakes(new Set());
-    setIsComplete(false);
-    setTimer(0);
+    // Return to the game start screen
+    setGameStarted(false);
+  };
+
+  // Render notes inside a cell in a 3x3 grid
+  const renderNotes = (cellNotes: Set<number>) => {
+    return (
+      <View style={styles.notesContainer}>
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(number => (
+          <Text
+            key={number}
+            style={[
+              styles.noteText,
+              cellNotes.has(number) ? {} : styles.hiddenNote
+            ]}
+          >
+            {number}
+          </Text>
+        ))}
+      </View>
+    );
   };
 
   const renderCell = useCallback((value: number | null, row: number, col: number) => {
     const isSelected = selectedCell?.[0] === row && selectedCell?.[1] === col;
     const isInitial = initialBoard[row][col] !== null;
     const isMistake = mistakes.has(`${row},${col}`);
+    const cellNotes = getCellNotes(row, col);
+    const hasNotes = cellNotes.size > 0;
+    
     const borderStyles = {
       borderRightWidth: (col + 1) % 3 === 0 ? 2 : 1,
       borderBottomWidth: (row + 1) % 3 === 0 ? 2 : 1,
     };
+
+    // Check if cell is in the same row, column, or 3x3 box as the selected cell
+    const isSameRow = selectedCell && selectedCell[0] === row;
+    const isSameColumn = selectedCell && selectedCell[1] === col;
+    
+    // Check if cell is in the same 3x3 box as the selected cell
+    const isSameBox = selectedCell && 
+      Math.floor(row / 3) === Math.floor(selectedCell[0] / 3) && 
+      Math.floor(col / 3) === Math.floor(selectedCell[1] / 3);
+      
+    // Check if the cell has the same number as the selected cell
+    const hasSameNumber = selectedCell && 
+      board[selectedCell[0]][selectedCell[1]] !== null && 
+      value === board[selectedCell[0]][selectedCell[1]];
 
     return (
       <Pressable
@@ -122,38 +253,69 @@ export default function GameScreen() {
         style={[
           styles.cell,
           borderStyles,
+          // Always apply selectedCell style first, regardless of whether it's initial or not
           isSelected && styles.selectedCell,
-          isInitial && styles.initialCell,
-          isMistake && styles.mistakeCell,
+          // Only apply these highlights if not selected
+          !isSelected && isSameRow && styles.highlightedRow,
+          !isSelected && isSameColumn && styles.highlightedColumn,
+          !isSelected && isSameBox && !isSameRow && !isSameColumn && styles.highlightedBox,
+          highlightMatchingNumbers && !isSelected && hasSameNumber && styles.highlightedSameNumber,
+          showMistakes && isMistake && styles.mistakeCell,
         ]}
         onPress={() => handleCellPress(row, col)}>
-        <Text
-          style={[
-            styles.cellText,
-            isInitial && styles.initialCellText,
-            isMistake && styles.mistakeCellText,
-          ]}>
-          {value || ''}
-        </Text>
+        {value !== null ? (
+          <Text
+            style={[
+              styles.cellText,
+              isInitial && styles.initialCellText,
+              showMistakes && isMistake && styles.mistakeCellText,
+            ]}>
+            {value}
+          </Text>
+        ) : hasNotes && notesEnabled ? (
+          renderNotes(cellNotes)
+        ) : null}
       </Pressable>
     );
-  }, [selectedCell, initialBoard, mistakes]);
+  }, [selectedCell, initialBoard, mistakes, board, highlightMatchingNumbers, showMistakes, notes, notesEnabled]);
 
-  if (!fontsLoaded || !board.length) {
+  if (!fontsLoaded) {
     return null;
   }
+
+  if (!gameStarted) {
+    return <GameStartScreen onStart={handleGameStart} />;
+  }
+
+  // Check if a number is fully placed (9 times) in the grid
+  const isNumberCompleted = (num: number): boolean => {
+    return numberCounts[num] >= 9;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Sudoku</Text>
-        <Text style={styles.timer}>{formatTime(timer)}</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Sudoku</Text>
+            <Text style={styles.difficulty}>{difficulty}</Text>
+          </View>
+          <Pressable style={styles.restartButton} onPress={handleRestart}>
+            <RotateCcw size={24} color="#000" />
+          </Pressable>
+        </View>
+        
+        <View style={styles.headerRight}>
+          <Text style={styles.timer}>{formatTime(timer)}</Text>
+          <Text style={styles.errorCount}>Errors: {errorCount}</Text>
+        </View>
       </View>
 
       {isComplete && (
         <View style={styles.completeMessage}>
           <Text style={styles.completeText}>Puzzle Complete!</Text>
           <Text style={styles.completeTime}>Time: {formatTime(timer)}</Text>
+          <Text style={styles.completeErrors}>Errors: {errorCount}</Text>
         </View>
       )}
 
@@ -166,38 +328,49 @@ export default function GameScreen() {
       </View>
 
       <View style={styles.controls}>
-        <View style={styles.numberPad}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((number) => (
+        {notesEnabled && (
+          <View style={styles.numberPadHeader}>
             <Pressable
-              key={number}
-              style={styles.numberButton}
-              onPress={() => handleNumberPress(number)}>
-              <Text style={styles.numberButtonText}>{number}</Text>
+              style={[styles.noteToggle, isNoteMode && styles.noteToggleActive]}
+              onPress={toggleNoteMode}>
+              <View style={styles.noteToggleContent}>
+                <Pencil size={16} color={isNoteMode ? "#6a1b9a" : "#666"} />
+                <Text style={[styles.noteToggleText, isNoteMode && styles.noteToggleTextActive]}>
+                  Notes {isNoteMode ? "On" : "Off"}
+                </Text>
+              </View>
             </Pressable>
-          ))}
+          </View>
+        )}
+
+        <View style={styles.numberPad}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((number) => {
+            const isCompleted = !isNoteMode && isNumberCompleted(number);
+            return (
+              <Pressable
+                key={number}
+                style={[
+                  styles.numberButton,
+                  isCompleted && styles.numberButtonDisabled
+                ]}
+                onPress={() => !isCompleted && handleNumberPress(number)}
+                disabled={isCompleted}>
+                <Text style={[
+                  styles.numberButtonText,
+                  isCompleted && styles.numberButtonTextDisabled
+                ]}>
+                  {number}
+                </Text>
+              </Pressable>
+            );
+          })}
           <Pressable
             style={styles.numberButton}
             onPress={() => handleNumberPress(0)}>
             <Text style={styles.numberButtonText}>×</Text>
           </Pressable>
         </View>
-
-        <View style={styles.gameActions}>
-          <Pressable style={styles.actionButton} onPress={handleRestart}>
-            <RotateCcw size={24} color="#000" />
-          </Pressable>
-          <Pressable
-            style={[styles.actionButton, isComplete && styles.actionButtonComplete]}
-            disabled={!isComplete}>
-            <Check size={24} color={isComplete ? '#fff' : '#000'} />
-          </Pressable>
-        </View>
       </View>
-
-      <DifficultySelector
-        difficulty={difficulty}
-        onSelect={setDifficulty}
-      />
     </SafeAreaView>
   );
 }
@@ -212,16 +385,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+  },
+  titleContainer: {
+    flexDirection: 'column',
+    marginRight: 12,
   },
   title: {
     fontFamily: 'Inter-Bold',
     fontSize: 32,
     color: '#000',
   },
+  difficulty: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#666',
+    marginTop: -4,
+  },
+  restartButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   timer: {
     fontFamily: 'SpaceMono-Regular',
-    fontSize: 24,
+    fontSize: 20,
     color: '#666',
+  },
+  errorCount: {
+    fontFamily: 'SpaceMono-Regular',
+    fontSize: 14,
+    color: '#f44336',
+    marginTop: 2,
   },
   completeMessage: {
     backgroundColor: '#4CAF50',
@@ -242,9 +448,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
+  completeErrors: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: '#fff',
+    marginTop: 4,
+  },
   board: {
     padding: 10,
     alignSelf: 'center',
+    marginTop: 10,
   },
   row: {
     flexDirection: 'row',
@@ -259,10 +472,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   selectedCell: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#b39ddb', // Deeper purple for selected cell
   },
-  initialCell: {
-    backgroundColor: '#f8f8f8',
+  highlightedRow: {
+    backgroundColor: '#e8e1f4', // More distinct light purple for the row
+  },
+  highlightedColumn: {
+    backgroundColor: '#e8e1f4', // More distinct light purple for the column
+  },
+  highlightedBox: {
+    backgroundColor: '#eee8f8', // More distinct very light purple for the box
+  },
+  highlightedSameNumber: {
+    backgroundColor: '#d4c4ef', // More distinct medium purple for matching numbers
   },
   mistakeCell: {
     backgroundColor: '#ffebee',
@@ -274,14 +496,63 @@ const styles = StyleSheet.create({
   },
   initialCellText: {
     color: '#000',
-    fontWeight: '600',
+    fontWeight: '700', // Increased boldness for prefilled numbers
+    fontSize: 22, // Slightly larger font size for prefilled numbers
   },
   mistakeCellText: {
     color: '#f44336',
   },
+  notesContainer: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  noteText: {
+    fontFamily: 'SpaceMono-Regular',
+    fontSize: 10,
+    color: '#666',
+    width: '33%',
+    height: '33%',
+    textAlign: 'center',
+  },
+  hiddenNote: {
+    opacity: 0,
+  },
   controls: {
     padding: 20,
     marginTop: 'auto',
+  },
+  numberPadHeader: {
+    marginBottom: 10,
+    paddingHorizontal: 5,
+  },
+  noteToggle: {
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+  },
+  noteToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteToggleActive: {
+    backgroundColor: '#f0e8f7', // Light purple background when active
+  },
+  noteToggleText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
+  },
+  noteToggleTextActive: {
+    fontFamily: 'Inter-Bold',
+    color: '#6a1b9a', // Purple text when active
   },
   numberPad: {
     flexDirection: 'row',
@@ -303,6 +574,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#000',
   },
+  numberButtonDisabled: {
+    backgroundColor: '#e0e0e0',
+    opacity: 0.6,
+  },
+  numberButtonTextDisabled: {
+    color: '#999',
+  },
   gameActions: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -315,8 +593,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  actionButtonComplete: {
-    backgroundColor: '#4CAF50',
   },
 });

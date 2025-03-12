@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "Sudoku",
+    "slug": "sudoku",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,16 +9,62 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dopesalmon.sudoku",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "bundler": "metro",
-      "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Sudoku",
+      "shortName": "Sudoku",
+      "startUrl": "/",
+      "display": "standalone",
+      "backgroundColor": "#FFFFFF",
+      "themeColor": "#6a1b9a",
+      "description": "Play Sudoku anywhere",
+      "icons": [
+        {
+          "src": "./assets/images/pwa/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        },
+        {
+          "src": "./assets/images/pwa/icon-512.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        },
+        {
+          "src": "./assets/images/pwa/icon-512-maskable.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "maskable"
+        }
+      ],
+      "splash": {
+        "image": "./assets/images/pwa/splash.png",
+        "backgroundColor": "#FFFFFF",
+        "resizeMode": "contain"
+      }
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
-      "typedRoutes": true
-    }
+      "typedRoutes": true,
+      "tsconfigPaths": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "59155d97-dbc2-44a0-b711-cef7ed051622"
+      }
+    },
+    "owner": "dopesalmon"
   }
 }

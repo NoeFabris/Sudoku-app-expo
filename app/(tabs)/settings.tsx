@@ -1,12 +1,21 @@
 import { View, Text, StyleSheet, Switch, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
+import { useSettings } from '@/contexts/SettingsContext';
 
 export default function SettingsScreen() {
-  const [showMistakes, setShowMistakes] = useState(true);
-  const [hapticFeedback, setHapticFeedback] = useState(true);
-  const [autoCheck, setAutoCheck] = useState(false);
+  const { 
+    highlightMatchingNumbers, 
+    setHighlightMatchingNumbers,
+    showMistakes,
+    setShowMistakes,
+    hapticFeedback,
+    setHapticFeedback,
+    autoCheck,
+    setAutoCheck,
+    notesEnabled,
+    setNotesEnabled
+  } = useSettings();
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -20,7 +29,6 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Settings</Text>
-
       <View style={styles.section}>
         <View style={styles.setting}>
           <Text style={styles.settingText}>Show Mistakes</Text>
@@ -30,7 +38,6 @@ export default function SettingsScreen() {
             trackColor={{ false: '#ddd', true: '#000' }}
           />
         </View>
-
         <View style={styles.setting}>
           <Text style={styles.settingText}>Haptic Feedback</Text>
           <Switch
@@ -39,7 +46,6 @@ export default function SettingsScreen() {
             trackColor={{ false: '#ddd', true: '#000' }}
           />
         </View>
-
         <View style={styles.setting}>
           <Text style={styles.settingText}>Auto-check Solution</Text>
           <Switch
@@ -48,8 +54,24 @@ export default function SettingsScreen() {
             trackColor={{ false: '#ddd', true: '#000' }}
           />
         </View>
+        <View style={styles.setting}>
+          <Text style={styles.settingText}>Enable Notes</Text>
+          <Switch
+            value={notesEnabled}
+            onValueChange={setNotesEnabled}
+            trackColor={{ false: '#ddd', true: '#000' }}
+          />
+        </View>
+        <View style={styles.setting}>
+          <Text style={styles.settingText}>Highlight Matching Numbers</Text>
+          <Switch
+            value={highlightMatchingNumbers}
+            onValueChange={setHighlightMatchingNumbers}
+            trackColor={{ false: '#ddd', true: '#000' }}
+          />
+        </View>
       </View>
-
+      
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Statistics</Text>
         <View style={styles.stats}>
@@ -67,7 +89,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </View>
-
+      
       <View style={styles.section}>
         <Pressable style={styles.button}>
           <Text style={styles.buttonText}>Reset Statistics</Text>
