@@ -6,6 +6,7 @@ import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/in
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import * as Haptics from 'expo-haptics';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useGameState } from '@/contexts/GameStateContext';
 import GameStartScreen from '@/components/GameStartScreen';
 import {
   type Board,
@@ -33,15 +34,86 @@ export default function GameScreen() {
   // Add notes state
   const [notes, setNotes] = useState<CellNotes>({});
   const [isNoteMode, setIsNoteMode] = useState(false);
+  // Flag to track if we're loading a saved game
+  const [isLoadingSavedGame, setIsLoadingSavedGame] = useState(true);
 
   // Use the settings context to get the current settings
   const { highlightMatchingNumbers, showMistakes, autoCheck, hapticFeedback, notesEnabled } = useSettings();
+  
+  // Use the game state context
+  const { gameState, saveGameState, loadGameState, clearGameState } = useGameState();
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-Bold': Inter_700Bold,
     'SpaceMono-Regular': SpaceMono_400Regular,
   });
+
+  // Save game state when it changes
+  useEffect(() => {
+    // Don't save if we're loading a game or no game has started
+    if (isLoadingSavedGame || !gameStarted || !board.length) return;
+
+    // Save current game state
+    saveGameState({
+      board,
+      initialBoard,
+      solution,
+      selectedCell,
+      timer,
+      difficulty,
+      mistakes,
+      errorCount,
+      isComplete,
+      gameStarted,
+      notes,
+      isNoteMode,
+    });
+  }, [
+    board, 
+    initialBoard, 
+    solution, 
+    selectedCell, 
+    timer, 
+    difficulty, 
+    mistakes, 
+    errorCount, 
+    isComplete, 
+    gameStarted, 
+    notes, 
+    isNoteMode, 
+    saveGameState, 
+    isLoadingSavedGame
+  ]);
+
+  // Load saved game state on first render
+  useEffect(() => {
+    const restoreSavedGame = async () => {
+      // Try to load a saved game
+      const savedState = await loadGameState();
+      
+      if (savedState && savedState.gameStarted && !savedState.isComplete) {
+        // Restore the saved game state
+        setBoard(savedState.board);
+        setInitialBoard(savedState.initialBoard);
+        setSolution(savedState.solution);
+        setSelectedCell(savedState.selectedCell);
+        setTimer(savedState.timer);
+        setDifficulty(savedState.difficulty);
+        setMistakes(savedState.mistakes);
+        setErrorCount(savedState.errorCount);
+        setIsComplete(savedState.isComplete);
+        setGameStarted(savedState.gameStarted);
+        setNotes(savedState.notes);
+        setIsNoteMode(savedState.isNoteMode);
+      }
+      
+      // Set loading state to false
+      setIsLoadingSavedGame(false);
+    };
+    
+    restoreSavedGame();
+  }, [loadGameState]);
 
   const startNewGame = useCallback((diff: Difficulty) => {
     const { initial, solution: newSolution } = generatePuzzle(diff);
@@ -191,6 +263,8 @@ export default function GameScreen() {
     // Check if the puzzle is complete
     if (checkWin(newBoard, solution)) {
       setIsComplete(true);
+      // Clear the saved game state when the game is complete
+      clearGameState();
       if (hapticFeedback && Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -198,8 +272,12 @@ export default function GameScreen() {
   };
 
   const handleRestart = () => {
-    // Return to the game start screen
+    // Clear the saved game and return to the game start screen
     setGameStarted(false);
+    // Clear any saved game from storage
+    if (gameState) {
+      clearGameState();
+    }
   };
 
   // Render notes inside a cell in a 3x3 grid
@@ -283,7 +361,7 @@ export default function GameScreen() {
     return null;
   }
 
-  if (!gameStarted) {
+  if (!gameStarted && !isLoadingSavedGame) {
     return <GameStartScreen onStart={handleGameStart} />;
   }
 
