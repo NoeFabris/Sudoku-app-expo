@@ -70,53 +70,52 @@ export default function GameScreen() {
       isNoteMode,
     });
   }, [
-    board, 
-    initialBoard, 
-    solution, 
-    selectedCell, 
-    timer, 
-    difficulty, 
-    mistakes, 
-    errorCount, 
-    isComplete, 
-    gameStarted, 
-    notes, 
-    isNoteMode, 
     saveGameState, 
-    isLoadingSavedGame
+    isLoadingSavedGame,
+    gameStarted,
+    board.length
   ]);
 
   // Load saved game state on first render
   useEffect(() => {
     const restoreSavedGame = async () => {
-      // Try to load a saved game
-      const savedState = await loadGameState();
-      
-      if (savedState && savedState.gameStarted && !savedState.isComplete) {
-        // Restore the saved game state
-        setBoard(savedState.board);
-        setInitialBoard(savedState.initialBoard);
-        setSolution(savedState.solution);
-        setSelectedCell(savedState.selectedCell);
-        setTimer(savedState.timer);
-        setDifficulty(savedState.difficulty);
-        setMistakes(savedState.mistakes);
-        setErrorCount(savedState.errorCount);
-        setIsComplete(savedState.isComplete);
-        setGameStarted(savedState.gameStarted);
-        setNotes(savedState.notes);
-        setIsNoteMode(savedState.isNoteMode);
+      try {
+        // Try to load a saved game
+        const savedState = await loadGameState();
+        
+        if (savedState && savedState.gameStarted && !savedState.isComplete) {
+          // Restore the saved game state all at once using a function-style setState
+          setBoard(savedState.board);
+          setInitialBoard(savedState.initialBoard);
+          setSolution(savedState.solution);
+          setSelectedCell(savedState.selectedCell);
+          setTimer(savedState.timer);
+          setDifficulty(savedState.difficulty);
+          setMistakes(savedState.mistakes);
+          setErrorCount(savedState.errorCount);
+          setIsComplete(savedState.isComplete);
+          setGameStarted(savedState.gameStarted);
+          setNotes(savedState.notes);
+          setIsNoteMode(savedState.isNoteMode);
+        }
+      } catch (error) {
+        console.error('Error restoring game state:', error);
+      } finally {
+        // Always set loading state to false
+        setIsLoadingSavedGame(false);
       }
-      
-      // Set loading state to false
-      setIsLoadingSavedGame(false);
     };
     
     restoreSavedGame();
-  }, [loadGameState]);
+  }, []);
 
+  // Generate a new game with the given difficulty
   const startNewGame = useCallback((diff: Difficulty) => {
     const { initial, solution: newSolution } = generatePuzzle(diff);
+    
+    // Batch all state updates at once to reduce re-renders
+    setIsLoadingSavedGame(true); // Temporarily disable saving while we update state
+    
     setBoard(initial.map(row => [...row]));
     setInitialBoard(initial.map(row => [...row]));
     setSolution(newSolution);
@@ -126,14 +125,22 @@ export default function GameScreen() {
     setErrorCount(0);
     setIsComplete(false);
     setDifficulty(diff);
-    setGameStarted(true);
     setNotes({});  // Clear notes when starting a new game
     setIsNoteMode(false); // Reset to regular mode
+
+    // Finally, set gameStarted and isLoadingSavedGame
+    setGameStarted(true);
+    
+    // Set isLoadingSavedGame to false after a short delay to allow the state to settle
+    setTimeout(() => {
+      setIsLoadingSavedGame(false);
+    }, 100);
   }, []);
 
-  const handleGameStart = (diff: Difficulty) => {
+  // Handle game start from the GameStartScreen
+  const handleGameStart = useCallback((diff: Difficulty) => {
     startNewGame(diff);
-  };
+  }, [startNewGame]);
 
   useEffect(() => {
     if (!fontsLoaded || !gameStarted || isComplete) return;
