@@ -1,13 +1,15 @@
 import { Platform } from 'react-native';
 
-export type Difficulty = 'Easy' | 'Medium' | 'Hard';
+export type Difficulty = 'Beginner' | 'Easy' | 'Medium' | 'Hard' | 'Expert';
 export type Board = (number | null)[][];
 export type Position = [number, number];
 
 const DIFFICULTY_RANGES = {
+  Beginner: { min: 45, max: 55 },
   Easy: { min: 35, max: 45 },
   Medium: { min: 25, max: 34 },
   Hard: { min: 17, max: 24 },
+  Expert: { min: 13, max: 16 },
 };
 
 // Fisher-Yates shuffle algorithm

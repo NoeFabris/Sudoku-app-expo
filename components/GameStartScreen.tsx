@@ -9,7 +9,7 @@ interface GameStartScreenProps {
 }
 
 export default function GameStartScreen({ onStart }: GameStartScreenProps) {
-  const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard'];
+  const difficulties: Difficulty[] = ['Beginner', 'Easy', 'Medium', 'Hard', 'Expert'];
   const [selectedDifficulty, setSelectedDifficulty] = React.useState<Difficulty>('Medium');
 
   const [fontsLoaded] = useFonts({

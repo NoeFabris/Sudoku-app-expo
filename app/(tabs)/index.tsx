@@ -7,6 +7,7 @@ import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import * as Haptics from 'expo-haptics';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameState } from '@/contexts/GameStateContext';
+import { useStats } from '@/contexts/StatsContext';
 import GameStartScreen from '@/components/GameStartScreen';
 import {
   type Board,
@@ -42,6 +43,9 @@ export default function GameScreen() {
   
   // Use the game state context
   const { gameState, saveGameState, loadGameState, clearGameState } = useGameState();
+
+  // Use the stats context
+  const { updateGamePlayed } = useStats();
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -363,6 +367,17 @@ export default function GameScreen() {
       </Pressable>
     );
   }, [selectedCell, initialBoard, mistakes, board, highlightMatchingNumbers, showMistakes, notes, notesEnabled]);
+
+  // Update when game is completed
+  useEffect(() => {
+    if (isComplete && gameStarted && !isLoadingSavedGame) {
+      // Record the completed game in stats
+      updateGamePlayed(true, difficulty, timer);
+
+      // Clear the saved game state since it's completed
+      clearGameState();
+    }
+  }, [isComplete, gameStarted, isLoadingSavedGame, difficulty, timer, updateGamePlayed, clearGameState]);
 
   if (!fontsLoaded) {
     return null;
