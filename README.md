@@ -33,6 +33,10 @@ This will:
 
 ## Deployment
 
+```bash
+eas deploy --prod
+```
+
 To deploy the PWA:
 
 1. Upload the contents of the `dist` directory to your web server
