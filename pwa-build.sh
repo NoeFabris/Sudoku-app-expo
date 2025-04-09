@@ -6,9 +6,9 @@ npm run build:web
 # Create necessary directories
 mkdir -p dist/assets/images/pwa
 
-# Copy PWA files to dist
+# Copy static assets
+cp -r web/assets dist/
 cp web/manifest.webmanifest dist/
-cp web/service-worker.js dist/
 
 # Copy PWA icon assets
 cp -r assets/images/pwa dist/assets/images/
