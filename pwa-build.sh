@@ -6,15 +6,21 @@ npm run build:web
 # Create necessary directories
 mkdir -p dist/assets/images/pwa
 
-# Copy static assets
-cp -r web/assets dist/
+# Copy static assets if they exist
+if [ -d "web/assets" ]; then
+  cp -r web/assets dist/
+fi
+
+# Copy manifest and service worker
 cp web/manifest.webmanifest dist/
+cp web/service-worker.js dist/
 
-# Copy PWA icon assets
-cp -r assets/images/pwa dist/assets/images/
-
-# Set proper permissions for the icon files
-chmod 644 dist/assets/images/pwa/*.png
+# Copy PWA icon assets if they exist
+if [ -d "assets/images/pwa" ]; then
+  cp -r assets/images/pwa dist/assets/images/
+  # Set proper permissions for the icon files
+  chmod 644 dist/assets/images/pwa/*.png
+fi
 
 # Insert PWA meta tags and service worker registration into all HTML files
 for file in dist/*.html; do
